@@ -1,3 +1,11 @@
+Modified web page code to run from command line in node.js so I can automate tasks. Thanks to original author's efforts.
+
+* removed filesaver (convert blob to buffer then use fs.writeFile)
+* removed muliple file handling (not needed, can run script multiple times)
+* simple CLI argument (just filename for now, todo: flag for "keep original filename")
+* removed webbity web bits
+* await accidentally the whole async
+
 # Kindle EPUB Fix
 
 Amazon Send-to-Kindle service has accepted EPUB, however, for historical reason

@@ -3,15 +3,16 @@ const TXT_DONE = 'Finished processing all files.'
 const TXT_NO_ERROR = 'No errors detected. Perhaps there are other errors?<br>Output file is available for download anyway.'
 const TXT_SYS_ERROR = 'The program encountered an internal error.'
 
-const mainStatusDiv = document.getElementById('main_status')
-const outputDiv = document.getElementById('output')
-const btnDlAll = document.getElementById('btnDlAll')
-const keepOriginalFilename = document.getElementById('keepOriginalFilename')
+//const mainStatusDiv = document.getElementById('main_status')
+//const outputDiv = document.getElementById('output')
+//const btnDlAll = document.getElementById('btnDlAll')
+const keepOriginalFilename = false
 
-const filePicker = document.getElementById('file')
+//const filePicker = document.getElementById('file')
 
 let filenames = [], fixedBlobs = [], dlfilenames = []
 
+/*
 function build_output_html(idx, status) {
   const statusDiv = document.createElement('div')
   const dlBtn = document.createElement('button')
@@ -64,7 +65,7 @@ function setMainStatus(type) {
     }
   }
 }
-
+*/
 function basename(path) {
   return path.split('/').pop()
 }
@@ -98,15 +99,17 @@ class EPUBBook {
   // Fix linking to body ID showing up as unresolved hyperlink
   fixBodyIdLink() {
     const bodyIDList = []
-    const parser = new DOMParser()
+    //const parser = new DOMParser('')
+    //const parser = new JSDOM ()
 
     // Create list of ID tag of <body>
     for (const filename in this.files) {
       const ext = filename.split('.').pop()
       if (ext === 'html' || ext === 'xhtml') {
         let html = this.files[filename]
-        const dom = parser.parseFromString(html, 'text/html')
-        const bodyID = dom.getElementsByTagName('body')[0].id
+        //const dom = parser.parseFromString(html, 'text/html')
+        const dom = new JSDOM (html,{contentType: "text/html"})
+        const bodyID = dom.window.document.getElementsByTagName('body')[0].id
         if (bodyID.length > 0) {
           const linkTarget = basename(filename) + '#' + bodyID
           bodyIDList.push([linkTarget, basename(filename)])
@@ -127,7 +130,7 @@ class EPUBBook {
 
   // Fix language field not defined or not available
   fixBookLanguage() {
-    const parser = new DOMParser()
+    //const parser = new DOMParser()
 
     // From https://kdp.amazon.com/en_US/help/topic/G200673300
     // Retrieved: 2022-Sep-13
@@ -149,9 +152,9 @@ class EPUBBook {
       return
     }
     const meta_inf_str = this.files['META-INF/container.xml']
-    const meta_inf = parser.parseFromString(meta_inf_str, 'text/xml')
+    const meta_inf = new JSDOM (meta_inf_str, {contentType: "text/xml"})
     let opf_filename = ''
-    for (const rootfile of meta_inf.getElementsByTagName('rootfile')) {
+    for (const rootfile of meta_inf.window.document.getElementsByTagName('rootfile')) {
       if (rootfile.getAttribute('media-type') === 'application/oebps-package+xml') {
         opf_filename = rootfile.getAttribute('full-path')
       }
@@ -165,8 +168,9 @@ class EPUBBook {
 
     const opf_str = this.files[opf_filename]
     try {
-      const opf = parser.parseFromString(opf_str, 'text/xml')
-      const language_tags = opf.getElementsByTagName('dc:language')
+      //const opf = parser.parseFromString(opf_str, 'text/xml')
+      const opf = new JSDOM (opf_str, {contentType: "text/xml"})
+      const language_tags = opf.window.document.getElementsByTagName('dc:language')
       let language = 'en'
       let original_language = 'undefined'
       if (language_tags.length === 0) {
@@ -196,14 +200,16 @@ class EPUBBook {
   }
 
   fixStrayIMG() {
-    const parser = new DOMParser()
+    //const parser = new DOMParser()
 
     for (const filename in this.files) {
       const ext = filename.split('.').pop()
       if (ext === 'html' || ext === 'xhtml') {
-        let html = parser.parseFromString(this.files[filename], ext === 'xhtml' ? 'application/xhtml+xml' : 'text/html')
+        //let html = parser.parseFromString(this.files[filename], ext === 'xhtml' ? 'application/xhtml+xml' : 'text/html')
+        let ctype = ext === 'xhtml' ? 'application/xhtml+xml' : 'text/html';
+	let html = new JSDOM (this.files[filename], {contentType: ctype})
         let strayImg = []
-        for (const img of html.getElementsByTagName('img')) {
+        for (const img of html.window.document.getElementsByTagName('img')) {
           if (!img.getAttribute('src')) {
             strayImg.push(img)
           }
@@ -266,21 +272,57 @@ class EPUBBook {
   }
 }
 
-filePicker.addEventListener('change', async (e) => {
-  const selectedFile = e.target.files[0]
-  setMainStatus(TXT_PROCESSING)
-  outputDiv.innerHTML = ''
-  btnDlAll.style.display = 'none'
+//filePicker.addEventListener('change', async (e) => {
 
-  for (const file of e.target.files) {
-    await processEPUB(file, file.name)
-  }
-  setMainStatus(TXT_DONE)
 
-  if (e.target.files.length > 1) {
-    btnDlAll.style.display = 'block'
-  }
-})
+if (process.argv.length === 2) {
+	  console.error('Expected at least one argument!');
+	  process.exit(1);
+}
+
+
+const filename = process.argv[2];
+
+    console.log(filename);
+
+const jsdom = require("jsdom");
+const { JSDOM } = jsdom;
+
+const zip = require("./zip.min.js")
+//const filesave = require("./FileSaver.min.js")
+//var filesave = require('file-saver');
+
+const fs = require( "fs");
+const { Blob } = require( "buffer");
+
+let buffer = fs.readFileSync(filename);
+let blob = new Blob([buffer]);
+
+
+  console.log(TXT_PROCESSING);
+
+(async () => {
+
+    await processEPUB(blob, filename)
+    console.log(TXT_DONE);
+
+try {
+
+    const buffer = Buffer.from( await fixedBlobs[0].arrayBuffer() );
+    fs.writeFile(dlfilenames[0], buffer, () => console.log(dlfilenames[0] + ' file saved!') );
+
+    //filesave.saveAs(fixedBlobs[0], dlfilenames[0])
+    //filesave.saveAs(fixedBlobs[0], "output.epub")
+    //saveAs(fixedBlobs[1], dlfilenames[1])
+    //await downloadAll()
+} catch (e) {
+	console.error(e)
+
+}
+
+})()
+
+//})
 
 async function processEPUB (inputBlob, name) {
   try {
@@ -301,11 +343,12 @@ async function processEPUB (inputBlob, name) {
     fixedBlobs.push(blob)
 
     if (epub.fixedProblems.length > 0) {
-      keepOriginalFilename.checked ? dlfilenames.push(name) : dlfilenames.push("(fixed) " + name)
-      outputDiv.appendChild(build_output_html(idx, epub.fixedProblems))
+      keepOriginalFilename ? dlfilenames.push(name) : dlfilenames.push("(fixed) " + name)
+      //dlfilenames.push("(fixed) " + name)
+      console.log(epub.fixedProblems)
     } else {
-      keepOriginalFilename.checked ? dlfilenames.push(name) : dlfilenames.push("(repacked) " + name)
-      outputDiv.appendChild(build_output_html(idx, TXT_NO_ERROR))
+      keepOriginalFilename ? dlfilenames.push(name) : dlfilenames.push("(repacked) " + name)
+      console.log(TXT_NO_ERROR)
     }
   } catch (e) {
     console.error(e)
@@ -317,13 +360,13 @@ async function processEPUB (inputBlob, name) {
     while (dlfilenames.length !== filenames.length) {
       dlfilenames.push(null)
     }
-    outputDiv.appendChild(build_output_html(idx, TXT_SYS_ERROR))
+    console.log(TXT_SYS_ERROR);
   }
 }
-
+/*
 async function downloadAll() {
-  const old = mainStatusDiv.innerHTML
-  mainStatusDiv.innerHTML = 'Preparing download...'
+  //const old = mainStatusDiv.innerHTML
+  console.log('Preparing download...');
   const blobWriter = new zip.BlobWriter('application/zip')
   const writer = new zip.ZipWriter(blobWriter, { extendedTimestamp: false })
   for (let i = 0; i < fixedBlobs.length; i++) {
@@ -332,8 +375,7 @@ async function downloadAll() {
   }
   await writer.close()
   const blob = blobWriter.getData()
-  saveAs(blob, 'fixed-epubs.zip')
-  mainStatusDiv.innerHTML = old
+  filesave.saveAs(blob, 'fixed-epubs.zip')
+  //mainStatusDiv.innerHTML = old
 }
-
-btnDlAll.addEventListener('click', downloadAll)
+*/
